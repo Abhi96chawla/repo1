@@ -1,52 +1,77 @@
-trigger:
-  batch: true
-  branches:
-    include:
-      - '*'
-pr:
-  branches:
-    include:
-      - '*'
+# azure-pipelines.yml
+trigger: none # Disable default trigger as we'll use repository resources
 
-parameters:
-  - name: repository
-    displayName: 'Repository to build'
-    type: string
-    default: 'repo1'
-    values:
-      - repo1
-      - repo2
+resources:
+  repositories:
+    - repository: repo1
+      type: github
+      name: Abhi96chawla/repo1
+      endpoint: 'YourGitHubServiceConnection' # Replace with your connection name
+      trigger:
+        branches:
+          include:
+            - main
+            - master
+    
+    - repository: repo2
+      type: github
+      name: Abhi96chawla/repo2
+      endpoint: 'YourGitHubServiceConnection' # Same as above
+      trigger:
+        branches:
+          include:
+            - main
+            - master
 
 variables:
-  buildRepoUrl: $[coalesce(contains(parameters.repository, 'repo1') && 'https://github.com/Abhi96chawla/repo1.git', 'https://github.com/Abhi96chawla/repo2.git')]
-  buildFolder: 'src'
+  JAVA_HOME: $(JAVA_HOME_11_X64)
 
 stages:
-  - stage: BuildAndPublish
-    jobs:
-      - job: BuildJob
-        steps:
-
-          - task: Bash@3
-            displayName: 'Clone Repository'
-            inputs:
-              targetType: 'inline'
-              script: |
-                git clone $(buildRepoUrl) $(Build.SourcesDirectory)/$(parameters.repository)
-                cd $(Build.SourcesDirectory)/$(parameters.repository)
-
-          - task: Bash@3
-            displayName: 'Compile Java Code'
-            inputs:
-              targetType: 'inline'
-              script: |
-                cd $(Build.SourcesDirectory)/$(parameters.repository)/$(buildFolder)
-                mkdir -p out
-                javac -d out Main.java
-                echo "Build done."
-
-          - task: PublishBuildArtifacts@1
-            displayName: 'Publish Artifact'
-            inputs:
-              PathtoPublish: '$(Build.SourcesDirectory)/$(parameters.repository)/src/out'
-              ArtifactName: '$(parameters.repository)-artifact'
+- stage: Build
+  displayName: 'Build Both Repositories'
+  jobs:
+  - job: Build_All
+    displayName: 'Build Java Projects'
+    steps:
+    # Checkout both repositories
+    - checkout: repo1
+    - checkout: repo2
+      path: repo2
+    
+    # Setup Java
+    - task: JavaToolInstaller@0
+      inputs:
+        versionSpec: '11'
+        jdkArchitectureOption: 'x64'
+        jdkSourceOption: 'PreInstalled'
+    
+    # Build repo1
+    - script: |
+        echo "Building repo1..."
+        cd src
+        javac Main.java
+      displayName: 'Compile repo1'
+      workingDirectory: $(Build.SourcesDirectory)/repo1
+    
+    # Build repo2
+    - script: |
+        echo "Building repo2..."
+        cd src
+        javac Main.java
+      displayName: 'Compile repo2'
+      workingDirectory: $(Build.SourcesDirectory)/repo2
+    
+    # Optional: Run tests or combine artifacts
+    - script: |
+        echo "Combining artifacts from both repositories"
+        mkdir -p $(Build.ArtifactStagingDirectory)/combined
+        cp repo1/src/*.class $(Build.ArtifactStagingDirectory)/combined/
+        cp repo2/src/*.class $(Build.ArtifactStagingDirectory)/combined/
+      displayName: 'Combine artifacts'
+    
+    # Publish combined artifacts
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/combined'
+        artifact: 'combined-java-binaries'
+        publishLocation: 'pipeline'
