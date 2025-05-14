@@ -1,0 +1,52 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - '*'
+pr:
+  branches:
+    include:
+      - '*'
+
+parameters:
+  - name: repository
+    displayName: 'Repository to build'
+    type: string
+    default: 'repo1'
+    values:
+      - repo1
+      - repo2
+
+variables:
+  buildRepoUrl: $[coalesce(contains(parameters.repository, 'repo1') && 'https://github.com/Abhi96chawla/repo1.git', 'https://github.com/Abhi96chawla/repo2.git')]
+  buildFolder: 'src'
+
+stages:
+  - stage: BuildAndPublish
+    jobs:
+      - job: BuildJob
+        steps:
+
+          - task: Bash@3
+            displayName: 'Clone Repository'
+            inputs:
+              targetType: 'inline'
+              script: |
+                git clone $(buildRepoUrl) $(Build.SourcesDirectory)/$(parameters.repository)
+                cd $(Build.SourcesDirectory)/$(parameters.repository)
+
+          - task: Bash@3
+            displayName: 'Compile Java Code'
+            inputs:
+              targetType: 'inline'
+              script: |
+                cd $(Build.SourcesDirectory)/$(parameters.repository)/$(buildFolder)
+                mkdir -p out
+                javac -d out Main.java
+                echo "Build done."
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Artifact'
+            inputs:
+              PathtoPublish: '$(Build.SourcesDirectory)/$(parameters.repository)/src/out'
+              ArtifactName: '$(parameters.repository)-artifact'
